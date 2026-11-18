@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Калькулятор</title>
+  <style>
+    body { font-family: sans-serif; background: #121212; color: #fff; margin: 0; padding: 20px; }
+    #display { width: 100%; height: 60px; font-size: 32px; text-align: right; background: #1e1e1e; color: #fff; border: none; padding: 10px; box-sizing: border-box; margin-bottom: 15px; border-radius: 8px; }
+    .grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+    button { padding: 20px; font-size: 20px; border: none; border-radius: 8px; background: #2c2c2c; color: #fff; cursor: pointer; }
+    button:active { background: #444; }
+    .op { background: #ff9500; }
+    #vault { display: none; margin-top: 20px; }
+    .app-item { display: flex; justify-content: space-between; align-items: center; padding: 12px; background: #1e1e1e; margin-bottom: 8px; border-radius: 8px; }
+    .btn-small { padding: 8px 12px; font-size: 14px; }
+    .hidden-badge { color: #ff5252; font-size: 12px; margin-left: 8px; }
+  </style>
+</head>
+<body>
+
+  <!-- Экран калькулятора -->
+  <div id="calc-screen">
+    <input type="text" id="display" readonly value="0">
+    <div class="grid">
+      <button onclick="press('7')">7</button>
+      <button onclick="press('8')">8</button>
+      <button onclick="press('9')">9</button>
+      <button class="op" onclick="press('/')">/</button>
+      <button onclick="press('4')">4</button>
+      <button onclick="press('5')">5</button>
+      <button onclick="press('6')">6</button>
+      <button class="op" onclick="press('*')">*</button>
+      <button onclick="press('1')">1</button>
+      <button onclick="press('2')">2</button>
+      <button onclick="press('3')">3</button>
+      <button class="op" onclick="press('-')">-</button>
+      <button onclick="clearDisplay()">C</button>
+      <button onclick="press('0')">0</button>
+      <button class="op" onclick="calculate()">=</button>
+      <button class="op" onclick="press('+')">+</button>
+    </div>
+  </div>
+
+  <!-- Скрытый сейф -->
+  <div id="vault">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
+      <h3>Секретный сейф</h3>
+      <button class="btn-small op" onclick="closeVault()">Закрыть</button>
+    </div>
+    <div id="apps-list">Загрузка приложений...</div>
+  </div>
+
+  <script>
+    const SECRET_PIN = "1337"; // Секретный пароль (вводится перед нажатием =)
+    let currentInput = "";
+    let hiddenPackages = JSON.parse(localStorage.getItem('hiddenApps') || '[]');
+
+    function press(val) {
+      currentInput += val;
+      document.getElementById('display').value = currentInput;
+    }
+
+    function clearDisplay() {
+      currentInput = "";
+      document.getElementById('display').value = "0";
+    }
+
+    function calculate() {
+      // Проверка секретного кода
+      if (currentInput === SECRET_PIN) {
+        clearDisplay();
+        openVault();
+        return;
+      }
+      // Обычный расчет
+      try {
+        currentInput = String(eval(currentInput));
+        document.getElementById('display').value = currentInput;
+      } catch {
+        document.getElementById('display').value = "Ошибка";
+        currentInput = "";
+      }
+    }
+
+    function openVault() {
+      document.getElementById('calc-screen').style.display = 'none';
+      document.getElementById('vault').style.display = 'block';
+      loadApps();
+    }
+
+    function closeVault() {
+      document.getElementById('vault').style.display = 'none';
+      document.getElementById('calc-screen').style.display = 'block';
+    }
+
+    function toggleHide(pkg) {
+      if (hiddenPackages.includes(pkg)) {
+        hiddenPackages = hiddenPackages.filter(p => p !== pkg);
+      } else {
+        hiddenPackages.push(pkg);
+      }
+      localStorage.setItem('hiddenApps', JSON.stringify(hiddenPackages));
+      loadApps();
+    }
+
+    async function launchApp(pkg) {
+      if (window.Capacitor && Capacitor.Plugins.AppsPlugin) {
+        await Capacitor.Plugins.AppsPlugin.launchApp({ packageName: pkg });
+      }
+    }
+
+    async function loadApps() {
+      const listEl = document.getElementById('apps-list');
+      if (!window.Capacitor || !Capacitor.Plugins.AppsPlugin) {
+        listEl.innerHTML = "Плагин AppsPlugin не найден (запустите на телефоне)";
+        return;
+      }
+      try {
+        const res = await Capacitor.Plugins.AppsPlugin.getInstalledApps();
+        const apps = res.apps || [];
+        listEl.innerHTML = "";
+
+        apps.forEach(app => {
+          const isHidden = hiddenPackages.includes(app.packageName);
+          const item = document.createElement('div');
+          item.className = 'app-item';
+          item.innerHTML = `
+            <div>
+              <strong>${app.name || app.packageName}</strong>
+              ${isHidden ? '<span class="hidden-badge">[СКРЫТО]</span>' : ''}
+            </div>
+            <div>
+              <button class="btn-small" onclick="toggleHide('${app.packageName}')">
+                ${isHidden ? 'Показать' : 'Скрыть'}
+              </button>
+              <button class="btn-small op" onclick="launchApp('${app.packageName}')">Открыть</button>
+            </div>
+          `;
+          listEl.appendChild(item);
+        });
+      } catch (e) {
+        listEl.innerHTML = "Ошибка загрузки списка: " + e.message;
+      }
+    }
+  </script>
+</body>
+</html>
