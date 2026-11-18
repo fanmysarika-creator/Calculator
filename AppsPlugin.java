@@ -3,8 +3,6 @@ package com.calculator.app;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
-import android.net.Uri;
-import android.provider.Settings;
 import com.getcapacitor.JSArray;
 import com.getcapacitor.JSObject;
 import com.getcapacitor.Plugin;
@@ -13,49 +11,45 @@ import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.CapacitorPlugin;
 import java.util.List;
 
-@CapacitorPlugin(name = "Apps")
+@CapacitorPlugin(name = "AppsPlugin")
 public class AppsPlugin extends Plugin {
 
     @PluginMethod
-    public void list(PluginCall call) {
+    public void getInstalledApps(PluginCall call) {
         PackageManager pm = getContext().getPackageManager();
-        Intent i = new Intent(Intent.ACTION_MAIN);
-        i.addCategory(Intent.CATEGORY_LAUNCHER);
-        List<ResolveInfo> list = pm.queryIntentActivities(i, 0);
-        JSArray arr = new JSArray();
-        for (ResolveInfo r : list) {
-            String pkg = r.activityInfo.packageName;
-            if (pkg.equals(getContext().getPackageName())) continue;
-            JSObject o = new JSObject();
-            o.put("name", r.loadLabel(pm).toString());
-            o.put("pkg", pkg);
-            arr.put(o);
+        Intent intent = new Intent(Intent.ACTION_MAIN, null);
+        intent.addCategory(Intent.CATEGORY_LAUNCHER);
+
+        List<ResolveInfo> apps = pm.queryIntentActivities(intent, 0);
+        JSArray appsArray = new JSArray();
+
+        for (ResolveInfo info : apps) {
+            JSObject appObj = new JSObject();
+            appObj.put("name", info.loadLabel(pm).toString());
+            appObj.put("packageName", info.activityInfo.packageName);
+            appsArray.put(appObj);
         }
-        JSObject res = new JSObject();
-        res.put("apps", arr);
-        call.resolve(res);
+
+        JSObject ret = new JSObject();
+        ret.put("apps", appsArray);
+        call.resolve(ret);
     }
 
     @PluginMethod
-    public void launch(PluginCall call) {
-        String pkg = call.getString("pkg");
-        Intent li = getContext().getPackageManager().getLaunchIntentForPackage(pkg);
-        if (li == null) {
-            call.reject("not found");
+    public void launchApp(PluginCall call) {
+        String packageName = call.getString("packageName");
+        if (packageName == null) {
+            call.reject("Не указано имя пакета");
             return;
         }
-        li.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-        getContext().startActivity(li);
-        call.resolve();
-    }
-
-    @PluginMethod
-    public void info(PluginCall call) {
-        String pkg = call.getString("pkg");
-        Intent i = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS);
-        i.setData(Uri.parse("package:" + pkg));
-        i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-        getContext().startActivity(i);
-        call.resolve();
+        PackageManager pm = getContext().getPackageManager();
+        Intent launchIntent = pm.getLaunchIntentForPackage(packageName);
+        if (launchIntent != null) {
+            getContext().startActivity(launchIntent);
+            call.resolve();
+        } else {
+            call.reject("Не удалось запустить приложение");
+        }
     }
 }
+
